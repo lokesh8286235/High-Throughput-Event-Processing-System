@@ -1,232 +1,110 @@
-# 🔄 High-Throughput Event Processing System
+# High-Throughput Event Processing System
 
-Event-driven processing platform built with Python, AWS Lambda, SQS, DynamoDB, retry mechanisms, dead-letter queues, and production observability.
+> Fault-tolerant asynchronous event processing with explicit retry, recovery, and observability paths.
 
-Designed to process high volumes of asynchronous business events while maintaining reliability, fault tolerance, and operational visibility.
+A serverless event-processing reference implementation using **Python, Amazon SQS, AWS Lambda, and DynamoDB**. The project focuses on the engineering decisions that matter when asynchronous workloads meet partial failure: decoupling, retries, dead-letter queues, idempotent processing, and operational visibility.
 
----
-
-# 📊 Impact
-
-| Metric | Result |
-|----------|----------|
-| Events Processed | 50,000+ per day |
-| System Availability | 99.9% |
-| Message Recovery | Automated retry + DLQ |
-| Deployment Model | Serverless |
-| Monitoring | Full observability stack |
-
----
-
-# 🎯 Problem
-
-Traditional synchronous workflows create bottlenecks when processing large volumes of business events.
-
-The goal was to build a fault-tolerant event processing platform capable of:
-
-- Processing thousands of events reliably
-- Automatically recovering from transient failures
-- Preventing message loss
-- Scaling without infrastructure management
-- Providing operational visibility for debugging and monitoring
-
----
-
-# 🏗️ Architecture
+## Architecture
 
 ```text
-                ┌────────────┐
-                │ Producer   │
-                └─────┬──────┘
-                      │
-                      ▼
-                ┌────────────┐
-                │ AWS SQS    │
-                └─────┬──────┘
-                      │
-                      ▼
-                ┌────────────┐
-                │ Lambda     │
-                │ Workers    │
-                └─────┬──────┘
-                      │
-                      ▼
-                ┌────────────┐
-                │ DynamoDB   │
-                └────────────┘
-
-Failed Messages
-       │
-       ▼
-┌──────────────┐
-│ Dead Letter │
-│ Queue       │
+ Producer
+    │
+    ▼
+┌─────────────┐
+│    SQS      │  buffering / decoupling
 └──────┬──────┘
        │
        ▼
-Monitoring & Alerts
+┌─────────────┐
+│   Lambda    │  event consumer
+│   Worker    │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  DynamoDB   │  state / persistence
+└─────────────┘
+
+Failures ──► Retry policy ──► DLQ ──► Inspection / recovery
+                    │
+                    └────────► Metrics / alerts
 ```
 
----
+## What it demonstrates
 
-# ⚙️ Design Decisions
+- Asynchronous producer/consumer decoupling
+- Retry handling for transient failures
+- Dead-letter queue isolation for failed events
+- Event-state persistence
+- Failure-aware operational workflows
+- Throughput, latency, queue-depth, and error monitoring
+- Serverless scaling without a long-running worker fleet
 
-## Why SQS?
+## Reliability model
 
-SQS provides decoupling between producers and consumers.
+The important part of an event system is not the happy path. The design explicitly considers:
 
-Benefits:
+| Failure mode | Response |
+|---|---|
+| Transient processing error | Retry |
+| Repeated processing failure | Dead-letter queue |
+| Traffic burst | Queue buffering + elastic consumers |
+| Downstream dependency issue | Decoupled asynchronous processing |
+| Investigation after failure | Retained failed messages + telemetry |
 
-- Handles traffic spikes
-- Improves reliability
-- Enables asynchronous processing
-- Simplifies scaling
+Exactly-once delivery should not be assumed from the architecture alone; application-level idempotency remains an important concern for real production systems.
 
----
+## Reported project results
 
-## Why Lambda?
+| Metric | Result |
+|---|---:|
+| Events processed | **50,000+ / day** |
+| Availability | **99.9%** |
+| Recovery | Retry + DLQ |
+| Deployment model | Serverless |
 
-Lambda provides automatic scaling without managing servers.
+These are project results, not independently audited production SLOs. Reproduce the workload and inspect the implementation before using the numbers as external benchmarks.
 
-Benefits:
+## Technology
 
-- Pay-per-use execution
-- Automatic concurrency scaling
-- Reduced operational overhead
-- Fast deployment cycles
+**Runtime:** Python · AWS Lambda  
+**Messaging:** Amazon SQS  
+**Storage:** DynamoDB  
+**Observability:** Prometheus · Grafana  
+**Reliability:** retries · dead-letter queues
 
----
+## Engineering decisions
 
-## Why DynamoDB?
+### Why SQS?
 
-DynamoDB provides highly available, low-latency storage for event state and processing metadata.
+SQS absorbs traffic bursts and separates producers from consumers, allowing each side to evolve and scale independently.
 
-Benefits:
+### Why Lambda?
 
-- Serverless operations
-- High throughput
-- Automatic scaling
-- Low maintenance burden
+Lambda keeps the worker layer operationally small while providing elastic execution for asynchronous workloads.
 
----
+### Why a DLQ?
 
-## Why Dead Letter Queues?
+A failed event should become diagnosable state rather than silently disappearing. The DLQ creates a recovery boundary for poison messages and persistent downstream failures.
 
-Production systems fail.
+## Production considerations
 
-DLQs ensure failures can be inspected and recovered rather than silently discarded.
+A production deployment would additionally need explicit controls for:
 
-Benefits:
+- Idempotency keys / deduplication
+- Visibility timeout tuning
+- Partial-batch failure behavior
+- Schema validation and versioning
+- Back-pressure and concurrency limits
+- IAM least privilege
+- Alert thresholds and runbooks
+- Replay tooling
 
-- Prevent message loss
-- Simplify debugging
-- Improve operational reliability
-- Enable recovery workflows
+## Status
 
----
+🚧 **Active engineering project**
 
-# 🚀 Key Features
+## Author
 
-### Asynchronous Event Processing
-
-Processes events independently from request-response workflows.
-
-### Automatic Retry Logic
-
-Transient failures are automatically retried before escalation.
-
-### Dead Letter Queue Recovery
-
-Failed events are isolated and available for investigation.
-
-### Observability
-
-Monitoring and alerting for:
-
-- Throughput
-- Error rates
-- Queue depth
-- Processing latency
-
-### Fault Tolerance
-
-System continues operating even when downstream services fail.
-
----
-
-# 📈 Results
-
-- Processed 50,000+ events/day
-- Achieved 99.9% availability
-- Eliminated message loss through retry and DLQ handling
-- Automated asynchronous business workflows
-- Reduced operational burden through serverless infrastructure
-
----
-
-# 💡 Lessons Learned
-
-### Reliability Beats Raw Throughput
-
-Systems fail in production. Recovery paths matter more than benchmark numbers.
-
-### Observability Is Not Optional
-
-Monitoring reduced debugging time dramatically and exposed hidden failure patterns.
-
-### Decoupling Simplifies Scaling
-
-Separating producers and consumers made the system easier to scale and evolve.
-
-### Distributed Systems Fail in Unexpected Ways
-
-Dead-letter queues and retries handled failure modes that were impossible to predict during development.
-
----
-
-# 🛠️ Tech Stack
-
-### Backend
-
-- Python
-
-### Cloud
-
-- AWS Lambda
-- Amazon SQS
-- DynamoDB
-
-### Reliability
-
-- Retry Mechanisms
-- Dead Letter Queues
-
-### Monitoring
-
-- Prometheus
-- Grafana
-
----
-
-# 🔮 Future Improvements
-
-- Event replay support
-- Multi-region failover
-- Event schema validation
-- Stream processing integration
-- Advanced alerting workflows
-
----
-
-# 📬 Contact
-
-### Naga Lokesh Sai Alla
-
-LinkedIn:
-https://www.linkedin.com/in/naga-lokesh-sai-alla-538242251/
-
-Portfolio:
-https://portfolio-r7n2.vercel.app/
-
-GitHub:
-https://github.com/lokesh8286235
+**Naga Lokesh Sai Alla**  
+[GitHub](https://github.com/lokesh8286235) · [LinkedIn](https://linkedin.com/in/naga-lokesh-sai-alla-538242251) · [Portfolio](https://portfolio-r7n2.vercel.app)
