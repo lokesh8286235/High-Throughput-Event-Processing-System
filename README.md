@@ -1,8 +1,30 @@
 # High-Throughput Event Processing System
 
-> Fault-tolerant asynchronous event processing with explicit retry, recovery, and observability paths.
+> Fault-tolerant asynchronous event processing with explicit **retry, recovery, idempotency, scaling, and observability** paths.
 
-A serverless event-processing reference implementation using **Python, Amazon SQS, AWS Lambda, and DynamoDB**. The project focuses on the engineering decisions that matter when asynchronous workloads meet partial failure: decoupling, retries, dead-letter queues, idempotent processing, and operational visibility.
+A serverless event-processing reference implementation using **Python, Amazon SQS, AWS Lambda, and DynamoDB**. The project focuses on the engineering decisions that matter when asynchronous workloads meet partial failure: decoupling, retries, dead-letter queues, state persistence, and operational visibility.
+
+## Why this project stands out
+
+The design starts with failure modes rather than the happy path:
+
+```text
+Traffic burst → Queue buffering → Elastic consumers
+                     │
+                     ▼
+              Processing failure
+                 ┌───┴───┐
+                 ▼       ▼
+               Retry   Persistent failure
+                          │
+                          ▼
+                         DLQ
+                          │
+                          ▼
+                  Inspect / Replay
+```
+
+The architecture makes failure **observable, recoverable, and diagnosable** instead of silently dropping work.
 
 ## Architecture
 
@@ -30,29 +52,27 @@ Failures ──► Retry policy ──► DLQ ──► Inspection / recovery
                     └────────► Metrics / alerts
 ```
 
+## Reliability model
+
+| Failure mode | Response | Engineering intent |
+|---|---|---|
+| Transient processing error | Retry | Recover without operator intervention |
+| Repeated processing failure | DLQ | Isolate poison events |
+| Traffic burst | Queue + elastic consumers | Absorb load without tightly coupling producer and worker |
+| Downstream dependency issue | Asynchronous decoupling | Reduce synchronous blast radius |
+| Post-failure investigation | Retained failed events + telemetry | Make incidents diagnosable |
+
+**Exactly-once delivery is not assumed.** Real production systems still need application-level idempotency and deduplication controls.
+
 ## What it demonstrates
 
 - Asynchronous producer/consumer decoupling
 - Retry handling for transient failures
-- Dead-letter queue isolation for failed events
+- Dead-letter queue isolation
 - Event-state persistence
 - Failure-aware operational workflows
 - Throughput, latency, queue-depth, and error monitoring
 - Serverless scaling without a long-running worker fleet
-
-## Reliability model
-
-The important part of an event system is not the happy path. The design explicitly considers:
-
-| Failure mode | Response |
-|---|---|
-| Transient processing error | Retry |
-| Repeated processing failure | Dead-letter queue |
-| Traffic burst | Queue buffering + elastic consumers |
-| Downstream dependency issue | Decoupled asynchronous processing |
-| Investigation after failure | Retained failed messages + telemetry |
-
-Exactly-once delivery should not be assumed from the architecture alone; application-level idempotency remains an important concern for real production systems.
 
 ## Reported project results
 
@@ -63,7 +83,20 @@ Exactly-once delivery should not be assumed from the architecture alone; applica
 | Recovery | Retry + DLQ |
 | Deployment model | Serverless |
 
-These are project results, not independently audited production SLOs. Reproduce the workload and inspect the implementation before using the numbers as external benchmarks.
+These are **project results**, not independently audited production SLOs. Reproduce the workload and inspect the implementation before treating the values as external benchmarks.
+
+## Production-readiness checklist
+
+A production deployment should explicitly address:
+
+- Idempotency keys and deduplication
+- Visibility timeout tuning
+- Partial-batch failure behavior
+- Schema validation and event versioning
+- Back-pressure and consumer concurrency limits
+- IAM least privilege
+- Alert thresholds and incident runbooks
+- DLQ inspection and replay tooling
 
 ## Technology
 
@@ -73,32 +106,13 @@ These are project results, not independently audited production SLOs. Reproduce 
 **Observability:** Prometheus · Grafana  
 **Reliability:** retries · dead-letter queues
 
-## Engineering decisions
+## Engineering principles
 
-### Why SQS?
-
-SQS absorbs traffic bursts and separates producers from consumers, allowing each side to evolve and scale independently.
-
-### Why Lambda?
-
-Lambda keeps the worker layer operationally small while providing elastic execution for asynchronous workloads.
-
-### Why a DLQ?
-
-A failed event should become diagnosable state rather than silently disappearing. The DLQ creates a recovery boundary for poison messages and persistent downstream failures.
-
-## Production considerations
-
-A production deployment would additionally need explicit controls for:
-
-- Idempotency keys / deduplication
-- Visibility timeout tuning
-- Partial-batch failure behavior
-- Schema validation and versioning
-- Back-pressure and concurrency limits
-- IAM least privilege
-- Alert thresholds and runbooks
-- Replay tooling
+> **Design the failure path before the happy path.**
+>
+> **A failed event should become diagnosable state.**
+>
+> **Scale the consumer independently from the producer.**
 
 ## Status
 
